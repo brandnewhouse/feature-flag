@@ -1,0 +1,29 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@hono/node-server": "^1.14.1",
+    "@types/node": "^22.15.17",
+    "@types/ws": "^8.18.1",
+    "hono": "^4.7.9",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "ws": "^8.18.2"
+  },
+  "directories": {
+    "example": "examples"
+  },
+  "description": "",
+  "packageManager": "yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610"
+}

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FEAFL Switch Toggle Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f0f0f0;
+        }
+        .switch {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .switch-status {
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            background-color: #ccc;
+            border-radius: 13px;
+            margin-right: 15px;
+            position: relative;
+            cursor: pointer;
+        }
+        .switch-status.on {
+            background-color: #4cd964;
+        }
+        .switch-status:before {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background-color: white;
+            top: 2px;
+            left: 2px;
+            transition: 0.2s;
+        }
+        .switch-status.on:before {
+            transform: translateX(24px);
+        }
+        .switch-name {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .logs {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>FEAFL Switch Toggle Demo</h1>
+    
+    <div class="status">Connection Status: <span id="connection-status">Disconnected</span></div>
+    
+    <button id="connect-btn">Connect to WebSocket</button>
+    <button id="refresh-btn">Refresh Switches</button>
+    
+    <h2>Switches</h2>
+    <div id="switches-container"></div>
+    
+    <h2>Logs</h2>
+    <div class="logs" id="logs"></div>
+    
+    <script>
+        let ws = null;
+        let switches = {};
+        
+        // DOM elements
+        const connectBtn = document.getElementById('connect-btn');
+        const refreshBtn = document.getElementById('refresh-btn');
+        const connectionStatus = document.getElementById('connection-status');
+        const switchesContainer = document.getElementById('switches-container');
+        const logs = document.getElementById('logs');
+        
+        // Helper function to add log message
+        function addLog(message) {
+            const now = new Date().toLocaleTimeString();
+            logs.innerHTML += `<div>${now}: ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+        
+        // Connect to WebSocket
+        function connectWebSocket() {
+            const host = window.location.hostname || 'localhost';
+            const wsUrl = `ws://${host}:3000/ws`;
+            
+            addLog(`Connecting to ${wsUrl}...`);
+            connectionStatus.textContent = 'Connecting...';
+            
+            // Close existing connection if any
+            if (ws) {
+                ws.close();
+            }
+            
+            ws = new WebSocket(wsUrl);
+            
+            // Connection opened
+            ws.addEventListener('open', (event) => {
+                connectionStatus.textContent = 'Connected';
+                connectBtn.textContent = 'Disconnect';
+                addLog('WebSocket connection established');
+            });
+            
+            // Listen for messages
+            ws.addEventListener('message', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addLog(`Received: ${JSON.stringify(data)}`);
+                    
+                    if (data.type === 'INIT') {
+                        // Initialize switches
+                        switches = data.switches;
+                        renderSwitches();
+                    }
+                    else if (data.type === 'SWITCH_UPDATE') {
+                        // Update specific switch
+                        switches[data.switch.id] = data.switch;
+                        renderSwitches();
+                    }
+                } catch (err) {
+                    addLog(`Error parsing message: ${err.message}`);
+                }
+            });
+            
+            // Connection closed
+            ws.addEventListener('close', (event) => {
+                connectionStatus.textContent = 'Disconnected';
+                connectBtn.textContent = 'Connect to WebSocket';
+                addLog('WebSocket connection closed');
+            });
+            
+            // Connection error
+            ws.addEventListener('error', (error) => {
+                connectionStatus.textContent = 'Error';
+                addLog('WebSocket error occurred');
+                console.error('WebSocket error:', error);
+            });
+        }
+        
+        // Render switches
+        function renderSwitches() {
+            switchesContainer.innerHTML = '';
+            
+            Object.values(switches).forEach(switchItem => {
+                const switchDiv = document.createElement('div');
+                switchDiv.className = 'switch';
+                
+                const status = document.createElement('div');
+                status.className = `switch-status ${switchItem.status === 'ON' ? 'on' : ''}`;
+                status.setAttribute('data-switch-id', switchItem.id);
+                status.addEventListener('click', toggleSwitch);
+                
+                const name = document.createElement('div');
+                name.className = 'switch-name';
+                name.textContent = `${switchItem.name} (${switchItem.id}): ${switchItem.status}`;
+                
+                switchDiv.appendChild(status);
+                switchDiv.appendChild(name);
+                switchesContainer.appendChild(switchDiv);
+            });
+        }
+        
+        // Toggle switch
+        function toggleSwitch(event) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('Cannot toggle switch: WebSocket not connected');
+                return;
+            }
+            
+            const switchId = event.currentTarget.getAttribute('data-switch-id');
+            
+            // Send toggle request
+            ws.send(JSON.stringify({
+                type: 'TOGGLE_SWITCH',
+                switchId: switchId
+            }));
+            
+            addLog(`Requested toggle for switch ${switchId}`);
+        }
+        
+        // Refresh switches via REST API
+        async function refreshSwitches() {
+            try {
+                const host = window.location.hostname || 'localhost';
+                const response = await fetch(`http://${host}:3000/switches`);
+                if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+                
+                const data = await response.json();
+                addLog(`Refreshed switches via REST API: ${data.length} switches`);
+                
+                // Update switches
+                data.forEach(switchItem => {
+                    switches[switchItem.id] = switchItem;
+                });
+                
+                renderSwitches();
+            } catch (err) {
+                addLog(`Error refreshing switches: ${err.message}`);
+            }
+        }
+        
+        // Event listeners
+        connectBtn.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            } else {
+                connectWebSocket();
+            }
+        });
+        
+        refreshBtn.addEventListener('click', refreshSwitches);
+        
+        // Initial log
+        addLog('Client initialized. Click "Connect to WebSocket" to begin.');
+    </script>
+</body>
+</html>
